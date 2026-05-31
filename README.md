@@ -1,55 +1,90 @@
-# BabyLex — Lexical Discovery in Child-Directed Speech
+# BabyLex
 
-A small interactive tool exploring how infants might acquire their first words from child-directed speech (motherese), and why current language models don't learn language the way humans do.
+**An interactive research demo exploring how children learn words — from segmenting speech to grounding meaning in the visual world.**
 
-🔗 **Live demo:** https://babylex.vercel.app
+🔗 **Live demo:** [babylex.vercel.app](https://babylex.vercel.app)
 
-## What It Does
+BabyLex is built to make the research questions behind *multimodal and socially-grounded speech language models* tangible and explorable. It is an interactive demonstration, not a model trained from scratch: the speech analysis is LLM-assisted, and the visual grounding runs on OpenAI's pretrained CLIP model.
 
-Give BabyLex a caregiver utterance like *"Look at the doggy! Big doggy!"* and it:
+---
 
-1. **Segments** the speech into candidate first words a pre-linguistic infant is most likely to acquire
-2. **Scores** each word's learnability (1–10) based on length, stress, concreteness, and repetition
-3. **Explains** why each word is learnable
-4. **Speaks back** a caregiver's warm, contingent response — modelling how social feedback reinforces word learning
+## What it does
 
-## The Research Question
+BabyLex has two connected parts, each illustrating a different challenge in early language acquisition.
 
-Large language models learn language from billions of words of text. Human infants learn it from something completely different — warm, repetitive, socially-grounded caregiver speech tied to shared attention and the physical world.
+### 1. Lexical segmentation & social feedback
+Type (or pick) a caregiver utterance — for example, *"Look at the doggy! Big doggy!"* — and BabyLex:
+- highlights the candidate words a learner might pull out of the continuous speech stream,
+- scores each word for "learnability,"
+- and generates a simulated caregiver social response, spoken aloud via the Web Speech API.
 
-BabyLex demonstrates two core challenges in grounded speech language modelling:
+This part is intentionally **text-only**, which exposes its own limitation: it has no access to acoustic salience, prosody, or what the words actually *refer to*.
 
-- **Lexical discovery** — how word boundaries and candidate words emerge from a continuous speech stream
-- **Social grounding** — how caregiver contingent responses shape word-meaning mappings
+### 2. Visual grounding (live CLIP model)
+This is the piece that closes that gap. Upload an image of an object, list a few candidate words, and a live **CLIP vision-language model** scores how strongly each word grounds in the image — mapping word and picture into a shared embedding space. Show it a photo of an apple, and *"apple"* wins at ~99.9%.
 
-Its key limitation is intentional and revealing: the model operates on text statistics alone, with no access to acoustic salience, prosodic stress, or shared visual attention — exactly the dimensions that multimodal speech language models aim to capture.
+Together, the two parts demonstrate the move from **statistical** to **visually grounded** word learning.
 
-## Tech Stack
+---
 
-- **React** + **Vite** — frontend
-- **Claude API** — speech segmentation and caregiver response generation
-- **Web Speech API** — spoken caregiver feedback (motherese-style synthesis)
-- **Recharts** — learnability visualisation
-- **Vercel** — deployment (serverless API function)
+## Architecture
 
-## Running Locally
-
-```bash
-# Install dependencies
-npm install
-
-# Add your API key to a .env file
-echo "ANTHROPIC_API_KEY=your_key_here" > .env
-
-# Start the backend (terminal 1)
-node server.js
-
-# Start the frontend (terminal 2)
-npm run dev
+```
+React + Vite frontend (Vercel)
+      │
+      ├── POST /api/analyze ──▶ serverless function (LLM-based segmentation + caregiver response)
+      │
+      └── POST /ground ──────▶ FastAPI + CLIP service (Hugging Face Space, Docker)
+                                      │
+                                      └── openai/clip-vit-base-patch32
 ```
 
-Open http://localhost:5173
+- **Frontend:** React, Vite, JavaScript, axios, Recharts
+- **Segmentation backend:** Node serverless function (`/api/analyze`)
+- **Grounding backend:** FastAPI + PyTorch + Hugging Face Transformers (CLIP), containerized with Docker and deployed on a Hugging Face Space
 
-## License
+---
 
-MIT
+## Tech stack
+
+| Layer | Tools |
+|---|---|
+| Frontend | React, Vite, JavaScript, axios, Recharts, Web Speech API |
+| Segmentation API | Node / serverless function |
+| Grounding API | Python, FastAPI, PyTorch (CPU), Hugging Face Transformers, CLIP |
+| Deployment | Vercel (frontend), Hugging Face Spaces / Docker (CLIP backend) |
+
+---
+
+## Running locally
+
+### Frontend
+```bash
+npm install
+npm run dev
+```
+Opens at `http://localhost:5173`.
+
+### CLIP grounding backend
+The grounding service lives in its own folder (`ml-backend/`). To run it locally:
+```bash
+cd ml-backend
+python -m venv venv
+venv\Scripts\activate          # Windows (use source venv/bin/activate on macOS/Linux)
+pip install torch --index-url https://download.pytorch.org/whl/cpu
+pip install fastapi "uvicorn[standard]" transformers pillow
+uvicorn app:app --reload --port 7860
+```
+In development the frontend automatically targets `http://localhost:7860`. In production it points to the deployed Hugging Face Space.
+
+---
+
+## Why this project
+
+The most interesting open problems in language acquisition sit at the boundary between what a model can infer from *patterns in text* and what it can only learn by being *grounded in the world* — through vision, social interaction, and shared attention. BabyLex is a small, hands-on way to see that boundary in action.
+
+---
+
+## Author
+
+**Sohini Roy Chowdhury** · [github.com/SohiniRC-bit](https://github.com/SohiniRC-bit)
