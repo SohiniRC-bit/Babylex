@@ -422,7 +422,7 @@ export default function App() {
       const words = input.replace(/[^a-zA-Z\s]/g, '').split(/\s+/).filter(w => w.length > 1)
       const topWord = words.sort((a, b) => a.length - b.length)[0] || words[0] || 'ball'
 
-      const { data } = await axios.post('http://localhost:3001/api/analyze', { utterance: input, topWord })
+      const { data } = await axios.post((import.meta.env.DEV ? 'http://localhost:3001/api/analyze' : '/api/analyze'), { utterance: input, topWord })
       setResult({ ...data, utterance: input })
       setTimeout(() => speak(data.caregiverResponse), 600)
 
