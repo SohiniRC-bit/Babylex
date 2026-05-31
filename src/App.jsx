@@ -391,6 +391,133 @@ const style = `
     font-size: 12px;
     color: #E8EAF0;
   }
+
+  /* ─── Visual grounding panel (CLIP model) ─── */
+  .upload-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    align-items: center;
+    margin-bottom: 16px;
+  }
+
+  .file-label {
+    font-family: 'DM Mono', monospace;
+    font-size: 11px;
+    color: rgba(232,234,240,0.5);
+    background: rgba(255,255,255,0.03);
+    border: 1px solid rgba(255,255,255,0.08);
+    padding: 9px 14px;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: all 0.2s;
+    letter-spacing: 0.02em;
+  }
+
+  .file-label:hover {
+    color: #5ECFB1;
+    border-color: rgba(94,207,177,0.35);
+    background: rgba(94,207,177,0.06);
+  }
+
+  .words-input {
+    flex: 1;
+    min-width: 220px;
+    background: rgba(255,255,255,0.03);
+    border: 1px solid rgba(255,255,255,0.1);
+    border-radius: 8px;
+    padding: 10px 14px;
+    font-family: 'DM Sans', sans-serif;
+    font-size: 14px;
+    font-weight: 300;
+    color: #E8EAF0;
+    outline: none;
+    transition: border-color 0.2s;
+  }
+
+  .words-input:focus { border-color: rgba(94,207,177,0.4); }
+
+  .ground-btn {
+    font-family: 'DM Mono', monospace;
+    font-size: 12px;
+    font-weight: 400;
+    letter-spacing: 0.08em;
+    color: #0A0C10;
+    background: #5ECFB1;
+    border: none;
+    padding: 11px 24px;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: all 0.2s;
+    text-transform: uppercase;
+  }
+
+  .ground-btn:hover:not(:disabled) {
+    background: #7FE0C6;
+    transform: translateY(-1px);
+  }
+
+  .ground-btn:disabled { opacity: 0.35; cursor: not-allowed; }
+
+  .ground-preview {
+    display: flex;
+    gap: 24px;
+    align-items: flex-start;
+    flex-wrap: wrap;
+    margin-top: 8px;
+    margin-bottom: 40px;
+  }
+
+  .ground-img {
+    width: 200px;
+    height: 200px;
+    object-fit: cover;
+    border-radius: 12px;
+    border: 1px solid rgba(255,255,255,0.1);
+  }
+
+  .ground-results {
+    flex: 1;
+    min-width: 240px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    padding-top: 4px;
+  }
+
+  .ground-bar-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+
+  .ground-word {
+    font-family: 'Playfair Display', serif;
+    font-size: 15px;
+    min-width: 90px;
+  }
+
+  .ground-bar-track {
+    flex: 1;
+    height: 8px;
+    background: rgba(255,255,255,0.06);
+    border-radius: 4px;
+    overflow: hidden;
+  }
+
+  .ground-bar-fill {
+    height: 100%;
+    border-radius: 4px;
+    transition: width 0.5s ease;
+  }
+
+  .ground-pct {
+    font-family: 'DM Mono', monospace;
+    font-size: 12px;
+    min-width: 52px;
+    text-align: right;
+    color: rgba(232,234,240,0.6);
+  }
 `
 
 const CustomTooltip = ({ active, payload }) => {
@@ -410,6 +537,19 @@ export default function App() {
   const [result, setResult] = useState(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+
+  // ─── Visual grounding (CLIP) state ───
+  const [groundImage, setGroundImage] = useState(null)
+  const [groundWords, setGroundWords] = useState('apple, dog, ball, car, cup')
+  const [grounding, setGrounding] = useState(null)
+  const [groundingLoading, setGroundingLoading] = useState(false)
+  const [groundingError, setGroundingError] = useState('')
+
+  // Local dev points at the Python CLIP service on :7860.
+  // After deploying to Hugging Face, replace the production URL below.
+  const ML_URL = import.meta.env.DEV
+    ? 'http://localhost:7860'
+    : 'https://sohini-rc-babylex-clip.hf.space'
 
   const analyze = async (text) => {
     const input = text || utterance
@@ -435,6 +575,37 @@ export default function App() {
   const handlePreset = (preset) => {
     setUtterance(preset.text)
     analyze(preset.text)
+  }
+
+  const handleImageUpload = (e) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    const reader = new FileReader()
+    reader.onload = () => {
+      setGroundImage(reader.result)   // data:image/...;base64,xxxx
+      setGrounding(null)
+      setGroundingError('')
+    }
+    reader.readAsDataURL(file)
+  }
+
+  const runGrounding = async () => {
+    if (!groundImage) return
+    const words = groundWords.split(',').map(w => w.trim()).filter(Boolean)
+    if (words.length === 0) {
+      setGroundingError('Add at least one candidate word.')
+      return
+    }
+    setGroundingLoading(true)
+    setGroundingError('')
+    setGrounding(null)
+    try {
+      const { data } = await axios.post(`${ML_URL}/ground`, { image_b64: groundImage, words })
+      setGrounding(data.scores)   // [{word, score}, ...] sorted high→low
+    } catch {
+      setGroundingError('Grounding failed — is the CLIP model running on port 7860 (or your HF Space)?')
+    }
+    setGroundingLoading(false)
   }
 
   const getHighlightedTokens = () => {
@@ -594,6 +765,69 @@ export default function App() {
                   That gap — between statistical and grounded language acquisition — is precisely
                   what multimodal SpeechLM training aims to close.
                 </p>
+              </div>
+            </div>
+          )}
+
+          {/* ─── Visual grounding: a real CLIP model closing the "shared visual attention" gap ─── */}
+          <hr className="divider" />
+
+          <p className="section-label">Visual grounding — live CLIP model</p>
+          <p className="intro-text" style={{ marginBottom: 24 }}>
+            The analysis above is text-only. Here a real vision-language model
+            (<em>OpenAI CLIP</em>) grounds a word directly in an <em>image</em> — the shared
+            visual attention the research note describes as missing. Upload a picture of an object,
+            list candidate words, and the model scores which word the image grounds to.
+          </p>
+
+          <div className="upload-row">
+            <label className="file-label">
+              {groundImage ? 'Change image' : 'Upload image'}
+              <input
+                type="file"
+                accept="image/*"
+                onChange={handleImageUpload}
+                style={{ display: 'none' }}
+              />
+            </label>
+            <input
+              className="words-input"
+              value={groundWords}
+              onChange={e => setGroundWords(e.target.value)}
+              placeholder="candidate words, comma-separated"
+            />
+            <button
+              className="ground-btn"
+              onClick={runGrounding}
+              disabled={groundingLoading || !groundImage}
+            >
+              {groundingLoading ? 'Grounding…' : 'Ground'}
+            </button>
+          </div>
+
+          {groundingError && <div className="error-msg">{groundingError}</div>}
+
+          {groundImage && (
+            <div className="ground-preview">
+              <img className="ground-img" src={groundImage} alt="to ground" />
+              <div className="ground-results">
+                {grounding ? grounding.map((g, i) => (
+                  <div className="ground-bar-row" key={g.word}>
+                    <span className="ground-word" style={{ color: i === 0 ? '#5ECFB1' : 'rgba(232,234,240,0.7)' }}>
+                      {g.word}{i === 0 ? ' ●' : ''}
+                    </span>
+                    <div className="ground-bar-track">
+                      <div className="ground-bar-fill" style={{
+                        width: `${(g.score * 100).toFixed(0)}%`,
+                        background: i === 0 ? '#5ECFB1' : '#7EB8F7',
+                        opacity: i === 0 ? 1 : 0.5
+                      }} />
+                    </div>
+                    <span className="ground-pct">{(g.score * 100).toFixed(1)}%</span>
+                  </div>
+                )) : (
+                  <span className="loading-text">Image ready — click “Ground” to run the model.</span>
+                )}
               </div>
             </div>
           )}
